@@ -5,7 +5,7 @@ class CartItem {
   final String name;
   final double price;
   int quantity;
-  final double discount; // Discount percentage (0.0 to 1.0)
+  final double discount;
 
   CartItem({
     required this.id,
@@ -16,47 +16,39 @@ class CartItem {
   });
 }
 
-class ShoppingCart extends StatefulWidget {
-  const ShoppingCart({super.key});
-
-  @override
-  State<ShoppingCart> createState() => _ShoppingCartState();
-}
-
-class _ShoppingCartState extends State<ShoppingCart> {
+class ShoppingCartLogic {
   final List<CartItem> _items = [];
 
+  List<CartItem> get items => List.unmodifiable(_items);
+
   void addItem(String id, String name, double price, {double discount = 0.0}) {
-    setState(() {
+    final existingIndex = _items.indexWhere((item) => item.id == id);
+    if (existingIndex != -1) {
+      _items[existingIndex].quantity++;
+    } else {
       _items.add(
         CartItem(id: id, name: name, price: price, discount: discount),
       );
-    });
+    }
   }
 
   void removeItem(String id) {
-    setState(() {
-      _items.removeWhere((item) => item.id == id);
-    });
+    _items.removeWhere((item) => item.id == id);
   }
 
   void updateQuantity(String id, int newQuantity) {
-    setState(() {
-      final index = _items.indexWhere((item) => item.id == id);
-      if (index != -1) {
-        if (newQuantity <= 0) {
-          _items.removeAt(index);
-        } else {
-          _items[index].quantity = newQuantity;
-        }
+    final index = _items.indexWhere((item) => item.id == id);
+    if (index != -1) {
+      if (newQuantity <= 0) {
+        _items.removeAt(index);
+      } else {
+        _items[index].quantity = newQuantity;
       }
-    });
+    }
   }
 
   void clearCart() {
-    setState(() {
-      _items.clear();
-    });
+    _items.clear();
   }
 
   double get subtotal {
@@ -70,17 +62,52 @@ class _ShoppingCartState extends State<ShoppingCart> {
   double get totalDiscount {
     double discount = 0;
     for (var item in _items) {
-      discount += item.discount * item.quantity;
+      discount += item.price * item.quantity * item.discount;
     }
     return discount;
   }
 
   double get totalAmount {
-    return subtotal + totalDiscount;
+    return subtotal - totalDiscount;
   }
 
   int get totalItems {
     return _items.fold(0, (sum, item) => sum + item.quantity);
+  }
+}
+
+class ShoppingCart extends StatefulWidget {
+  const ShoppingCart({super.key});
+
+  @override
+  State<ShoppingCart> createState() => _ShoppingCartState();
+}
+
+class _ShoppingCartState extends State<ShoppingCart> {
+  final ShoppingCartLogic _cartLogic = ShoppingCartLogic();
+
+  void _addItem(String id, String name, double price, {double discount = 0.0}) {
+    setState(() {
+      _cartLogic.addItem(id, name, price, discount: discount);
+    });
+  }
+
+  void _removeItem(String id) {
+    setState(() {
+      _cartLogic.removeItem(id);
+    });
+  }
+
+  void _updateQuantity(String id, int newQuantity) {
+    setState(() {
+      _cartLogic.updateQuantity(id, newQuantity);
+    });
+  }
+
+  void _clearCart() {
+    setState(() {
+      _cartLogic.clearCart();
+    });
   }
 
   @override
@@ -92,21 +119,21 @@ class _ShoppingCartState extends State<ShoppingCart> {
           children: [
             ElevatedButton(
               onPressed: () =>
-                  addItem('1', 'Apple iPhone', 999.99, discount: 0.1),
+                  _addItem('1', 'Apple iPhone', 999.99, discount: 0.1),
               child: const Text('Add iPhone'),
             ),
             ElevatedButton(
               onPressed: () =>
-                  addItem('2', 'Samsung Galaxy', 899.99, discount: 0.15),
+                  _addItem('2', 'Samsung Galaxy', 899.99, discount: 0.15),
               child: const Text('Add Galaxy'),
             ),
             ElevatedButton(
-              onPressed: () => addItem('3', 'iPad Pro', 1099.99),
+              onPressed: () => _addItem('3', 'iPad Pro', 1099.99),
               child: const Text('Add iPad'),
             ),
             ElevatedButton(
               onPressed: () =>
-                  addItem('1', 'Apple iPhone', 999.99, discount: 0.1),
+                  _addItem('1', 'Apple iPhone', 999.99, discount: 0.1),
               child: const Text('Add iPhone Again'),
             ),
           ],
@@ -125,9 +152,9 @@ class _ShoppingCartState extends State<ShoppingCart> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Total Items: $totalItems'),
+                  Text('Total Items: ${_cartLogic.totalItems}'),
                   ElevatedButton(
-                    onPressed: clearCart,
+                    onPressed: _clearCart,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                     ),
@@ -136,11 +163,13 @@ class _ShoppingCartState extends State<ShoppingCart> {
                 ],
               ),
               const SizedBox(height: 8),
-              Text('Subtotal: \$${subtotal.toStringAsFixed(2)}'),
-              Text('Total Discount: \$${totalDiscount.toStringAsFixed(2)}'),
+              Text('Subtotal: \$${_cartLogic.subtotal.toStringAsFixed(2)}'),
+              Text(
+                'Total Discount: \$${_cartLogic.totalDiscount.toStringAsFixed(2)}',
+              ),
               const Divider(),
               Text(
-                'Total Amount: \$${totalAmount.toStringAsFixed(2)}',
+                'Total Amount: \$${_cartLogic.totalAmount.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
@@ -151,14 +180,14 @@ class _ShoppingCartState extends State<ShoppingCart> {
         ),
         const SizedBox(height: 16),
 
-        _items.isEmpty
+        _cartLogic.items.isEmpty
             ? const Center(child: Text('Cart is empty'))
             : ListView.builder(
                 physics: NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
-                itemCount: _items.length,
+                itemCount: _cartLogic.items.length,
                 itemBuilder: (context, index) {
-                  final item = _items[index];
+                  final item = _cartLogic.items[index];
                   final itemTotal = item.price * item.quantity;
 
                   return Card(
@@ -183,7 +212,7 @@ class _ShoppingCartState extends State<ShoppingCart> {
                         children: [
                           IconButton(
                             onPressed: () =>
-                                updateQuantity(item.id, item.quantity - 1),
+                                _updateQuantity(item.id, item.quantity - 1),
                             icon: const Icon(Icons.remove),
                           ),
                           Container(
@@ -199,11 +228,11 @@ class _ShoppingCartState extends State<ShoppingCart> {
                           ),
                           IconButton(
                             onPressed: () =>
-                                updateQuantity(item.id, item.quantity + 1),
+                                _updateQuantity(item.id, item.quantity + 1),
                             icon: const Icon(Icons.add),
                           ),
                           IconButton(
-                            onPressed: () => removeItem(item.id),
+                            onPressed: () => _removeItem(item.id),
                             icon: const Icon(Icons.delete),
                             color: Colors.red,
                           ),
